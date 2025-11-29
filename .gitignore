@@ -1,0 +1,13 @@
+# Dependencies
+node_modules/
+vendor/
+
+# Build output
+dist/
+
+# Dev flag
+.vite-dev
+
+# Logs
+*.log
+npm-debug.log*
