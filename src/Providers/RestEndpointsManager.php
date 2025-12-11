@@ -29,6 +29,7 @@ final class RestEndpointsManager
             return;
         }
 
+
         wp_localize_script(
             $localizeScriptHandleName,
             $localizeScriptObjectName,

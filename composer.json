@@ -3,7 +3,7 @@
     "description": "Core package for WordPress plugins",
     "autoload": {
         "psr-4": {
-            "WpPluginCore\\": "src/php/"
+            "WpPluginCore\\": "src/"
         }
     },
     "require": {
