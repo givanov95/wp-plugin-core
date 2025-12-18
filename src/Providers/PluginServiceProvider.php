@@ -2,12 +2,19 @@
 
 namespace WpPluginCore\Providers;
 
+use WpPluginCore\Admin\Menu\AdminMenu;
+
 abstract class PluginServiceProvider extends ServiceProvider
 {
     public function boot(): void
     {
         $this->bootAssets();
         $this->addModuleTypeToScripts();
+
+        if ($this instanceof \WpPluginCore\Admin\Interfaces\ShouldHaveAdminMenu) {
+            $adminMenu = $this->getAdminMenu();
+            $this->registerAdminMenu($adminMenu);
+        }
     }
 
     /**
@@ -149,5 +156,15 @@ abstract class PluginServiceProvider extends ServiceProvider
             }
             return $tag;
         }, 10, 3);
+    }
+
+    private function registerAdminMenu(AdminMenu $adminMenu): void
+    {
+
+        $this->addAction('admin_menu', function () use ($adminMenu) {
+            $adminMenu->register(function () {
+                echo '<div class="wrap"><h1>' . esc_html(get_admin_page_title()) . '</h1></div>';
+            });
+        });
     }
 }
