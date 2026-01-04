@@ -72,4 +72,51 @@ class Database
 
         return [implode(" AND ", $sql), $values];
     }
+
+    public function paginate(
+        array $conditions,
+        int $page = 1,
+        int $perPage = 10,
+        ?string $orderBy = null
+    ): array {
+        global $wpdb;
+
+        [$sql, $values] = $this->buildWhere($conditions);
+
+        $offset = ($page - 1) * $perPage;
+
+        $whereClause = $sql ? "WHERE {$sql}" : '';
+
+        if ($orderBy === null) {
+            $orderBy = "ORDER BY id DESC";
+        }
+
+        $query = "SELECT * FROM {$this->table} {$whereClause} {$orderBy} LIMIT %d OFFSET %d";
+
+        $values[] = $perPage;
+        $values[] = $offset;
+
+        $prepared = $wpdb->prepare($query, ...$values);
+
+        return $wpdb->get_results($prepared, ARRAY_A);
+    }
+
+
+    public function count(array $conditions = []): int
+    {
+        global $wpdb;
+
+        if (empty($conditions)) {
+            $query = "SELECT COUNT(*) FROM {$this->table}";
+            return (int)$wpdb->get_var($query);
+        }
+
+        [$sql, $values] = $this->buildWhere($conditions);
+
+        $query = "SELECT COUNT(*) FROM {$this->table} WHERE {$sql}";
+
+        $prepared = $wpdb->prepare($query, ...$values);
+
+        return (int)$wpdb->get_var($prepared);
+    }
 }

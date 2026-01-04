@@ -9,7 +9,7 @@ abstract class Component
      *
      * @return string
      */
-    abstract public static function render(): string;
+    abstract public function render(): string;
 
     /**
      * Escaping html special chars
