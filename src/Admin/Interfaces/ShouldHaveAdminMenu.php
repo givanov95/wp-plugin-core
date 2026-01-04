@@ -10,4 +10,5 @@ interface ShouldHaveAdminMenu
      * Get the admin menu title
      */
     public function getAdminMenu(): AdminMenu;
+
 }

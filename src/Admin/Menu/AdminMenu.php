@@ -2,13 +2,44 @@
 
 namespace WpPluginCore\Admin\Menu;
 
+use function add_menu_page;
+
 class AdminMenu
 {
+    /**
+     * @var string
+     */
     private string $pageTitle;
+
+    /**
+     * @var string
+     */
     private string $menuTitle;
+
+    /**
+     * @var string
+     */
     private string $capability;
+
+    /**
+     * @var string
+     */
     private string $menuSlug;
+
+    /**
+     * @var callable
+     */
+    private $pageRenderCallback;
+
+    /**
+     * @var string|null
+     */
     private ?string $iconUrl;
+
+    /**
+     *
+     * @var integer|null
+     */
     private ?int $position;
 
     public function __construct(
@@ -16,6 +47,7 @@ class AdminMenu
         string $menuTitle,
         string $capability,
         string $menuSlug,
+        callable $pageRenderCallback,
         ?string $iconUrl = null,
         ?int $position = null
     ) {
@@ -23,8 +55,11 @@ class AdminMenu
         $this->menuTitle = $menuTitle;
         $this->capability = $capability;
         $this->menuSlug = $menuSlug;
+        $this->pageRenderCallback = $pageRenderCallback;
         $this->iconUrl = $iconUrl;
         $this->position = $position;
+
+
     }
 
 
@@ -33,14 +68,14 @@ class AdminMenu
      *
      * @param callable $callback Function to render the page
      */
-    public function register(callable $callback): void
+    public function register(): void
     {
         add_menu_page(
             $this->pageTitle,
             $this->menuTitle,
             $this->capability,
             $this->menuSlug,
-            $callback,
+            $this->pageRenderCallback,
             $this->iconUrl,
             $this->position
         );
