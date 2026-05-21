@@ -4,26 +4,31 @@ namespace WpPluginCore\Pagination;
 
 class Paginator
 {
-    public array $items;
-    public int $total;
-    public int $perPage;
-    public int $currentPage;
-    public int $lastPage;
-    public string $baseUrl;
+    public readonly array $items;
+    public readonly int $total;
+    public readonly int $perPage;
+    public readonly int $currentPage;
+    public readonly int $lastPage;
+    public readonly string $baseUrl;
+    public readonly string $pageQueryVar;
 
     public function __construct(
         array $items,
         int $total,
         int $perPage,
         int $currentPage,
-        string $baseUrl
+        string $baseUrl,
+        string $pageQueryVar = 'page',
     ) {
-        $this->items = $items;
-        $this->total = $total;
-        $this->perPage = $perPage;
-        $this->currentPage = max(1, $currentPage);
-        $this->lastPage = (int)ceil($total / $perPage);
-        $this->baseUrl = $baseUrl;
+        $perPage = max(1, $perPage);
+
+        $this->items        = $items;
+        $this->total        = max(0, $total);
+        $this->perPage      = $perPage;
+        $this->currentPage  = max(1, $currentPage);
+        $this->lastPage     = max(1, (int) ceil($this->total / $perPage));
+        $this->baseUrl      = $baseUrl;
+        $this->pageQueryVar = $pageQueryVar;
     }
 
     public function getItems(): array
@@ -36,8 +41,12 @@ class Paginator
         return $this->lastPage > 1;
     }
 
+    /**
+     * Build a URL for the given page. Returns a raw URL (not escaped); callers
+     * must escape with esc_url() before using in HTML attributes.
+     */
     public function pageUrl(int $page): string
     {
-        return esc_url(add_query_arg('page', $page, $this->baseUrl));
+        return add_query_arg($this->pageQueryVar, max(1, $page), $this->baseUrl);
     }
 }

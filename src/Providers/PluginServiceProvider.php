@@ -2,90 +2,96 @@
 
 namespace WpPluginCore\Providers;
 
-use WpPluginCore\Admin\Menu\AdminMenu;
+use RuntimeException;
 
 abstract class PluginServiceProvider extends ServiceProvider
 {
+    /**
+     * Filename used as the "dev mode" flag. When present in the plugin
+     * root, assets are loaded from the Vite dev server instead of dist.
+     */
+    protected const DEV_FLAG = '.vite-dev';
+
     public function boot(): void
     {
-        $this->bootAssets();
-        $this->bootAdminAssets();
-        $this->addModuleTypeToScripts();
-
+        $this->addAction('wp_enqueue_scripts', fn () => $this->enqueueAssets('wp_head'));
+        $this->addAction('admin_enqueue_scripts', fn () => $this->enqueueAssets('admin_head'));
+        $this->registerModuleTypeFilter();
     }
 
     /**
-     * Handle the main plugin file path
+     * Absolute path to the plugin's main file (the one with the plugin header).
      */
     abstract protected function pluginMainFile(): string;
 
     /**
-     * handle scripts
+     * Script handle used for wp_enqueue_script.
      */
     abstract protected function scriptHandle(): string;
 
     /**
-     * handle styles
+     * Style handle used for wp_enqueue_style.
      */
     abstract protected function styleHandle(): string;
 
     /**
-     * URL dev server (example: http://localhost:5173)
+     * Vite dev server URL (e.g. http://localhost:5173).
      */
     abstract protected function devServerUrl(): string;
 
     /**
-     * Vite entrypoint, example: assets/js/main.ts
+     * Vite entrypoint relative to the project root (e.g. "assets/js/main.ts").
      */
     abstract protected function entryPoint(): string;
 
     /**
-     * Dist dir
+     * Directory (relative to the plugin root) containing the Vite build output.
      */
     abstract protected function distDirectory(): string;
 
     /**
-     * Boot the assets
-     *
-     * @return void
+     * Whether to also enqueue this plugin's assets on admin pages.
+     * Override and return false to disable admin enqueue entirely.
      */
-    protected function bootAssets(): void
+    protected function enqueueOnAdmin(): bool
     {
-        $this->addAction('wp_enqueue_scripts', function () {
-
-            $plugin_file = $this->pluginMainFile();
-            $plugin_dir  = plugin_dir_path($plugin_file);
-            $plugin_uri  = plugin_dir_url($plugin_file);
-
-            $is_dev = file_exists($plugin_dir . '/.vite-dev');
-
-            if ($is_dev) {
-                $this->enqueueDevAssets();
-            } else {
-                $this->enqueueProductionAssets($plugin_dir, $plugin_uri);
-            }
-        });
+        return true;
     }
 
-    protected function bootAdminAssets(): void
+    /**
+     * Whether to enqueue this plugin's assets on the public frontend.
+     * Override and return false to disable frontend enqueue entirely.
+     */
+    protected function enqueueOnFrontend(): bool
     {
-        $this->addAction('admin_enqueue_scripts', function () {
-            $plugin_file = $this->pluginMainFile();
-            $plugin_dir  = plugin_dir_path($plugin_file);
-            $plugin_uri  = plugin_dir_url($plugin_file);
-
-            $is_dev = file_exists($plugin_dir . '/.vite-dev');
-
-            if ($is_dev) {
-                $this->enqueueDevAssetsAdmin();
-            } else {
-                $this->enqueueProductionAssetsAdmin($plugin_dir, $plugin_uri);
-            }
-        });
+        return true;
     }
 
+    private function enqueueAssets(string $headHook): void
+    {
+        $isAdmin = $headHook === 'admin_head';
 
-    private function enqueueDevAssetsAdmin(): void
+        if ($isAdmin && !$this->enqueueOnAdmin()) {
+            return;
+        }
+        if (!$isAdmin && !$this->enqueueOnFrontend()) {
+            return;
+        }
+
+        $pluginFile = $this->pluginMainFile();
+        $pluginDir  = plugin_dir_path($pluginFile);
+        $pluginUri  = plugin_dir_url($pluginFile);
+
+        $isDev = file_exists($pluginDir . self::DEV_FLAG);
+
+        if ($isDev) {
+            $this->enqueueDevAssets($headHook);
+        } else {
+            $this->enqueueProductionAssets($pluginDir, $pluginUri);
+        }
+    }
+
+    private function enqueueDevAssets(string $headHook): void
     {
         $dev = rtrim($this->devServerUrl(), '/');
 
@@ -93,132 +99,53 @@ abstract class PluginServiceProvider extends ServiceProvider
 
         wp_enqueue_script(
             $this->scriptHandle(),
-            $dev . '/' . $this->entryPoint(),
+            $dev . '/' . ltrim($this->entryPoint(), '/'),
             ['vite-client'],
             null,
             true
         );
-
-        $this->addAction('admin_head', function () use ($dev) {
-            echo '<link rel="stylesheet" href="' . esc_url($dev . '/assets/css/main.css') . '" />';
-        });
     }
 
-    private function enqueueProductionAssetsAdmin(string $plugin_dir, string $plugin_uri): void
+    private function enqueueProductionAssets(string $pluginDir, string $pluginUri): void
     {
-        $manifest_path = $plugin_dir . '/' . $this->distDirectory() . '/.vite/manifest.json';
+        $distDir       = trim($this->distDirectory(), '/');
+        $manifestPath  = $pluginDir . $distDir . '/.vite/manifest.json';
 
-        if (!file_exists($manifest_path)) {
-            error_log("Manifest file not found: " . $manifest_path);
+        if (!file_exists($manifestPath)) {
+            $this->reportBuildError("Vite manifest not found at: {$manifestPath}");
             return;
         }
 
-        $manifest = json_decode(file_get_contents($manifest_path), true);
-
-        $entry = $manifest[$this->entryPoint()] ?? null;
+        $manifest = json_decode((string) file_get_contents($manifestPath), true);
+        $entryKey = $this->entryPoint();
+        $entry    = $manifest[$entryKey] ?? null;
 
         if (!$entry) {
-            error_log("Entry not found in manifest: " . $this->entryPoint());
+            $this->reportBuildError("Entry '{$entryKey}' not found in Vite manifest.");
             return;
         }
 
-        if (!empty($entry['css'])) {
-            foreach ($entry['css'] as $css_file) {
-                wp_enqueue_style(
-                    $this->styleHandle(),
-                    $plugin_uri . '/' . $this->distDirectory() . '/' . $css_file,
-                    [],
-                    null
-                );
-            }
+        $distUri = trailingslashit($pluginUri) . $distDir . '/';
+
+        foreach (($entry['css'] ?? []) as $index => $cssFile) {
+            wp_enqueue_style(
+                $index === 0 ? $this->styleHandle() : $this->styleHandle() . '-' . $index,
+                $distUri . $cssFile,
+                [],
+                null
+            );
         }
 
         wp_enqueue_script(
             $this->scriptHandle(),
-            $plugin_uri . '/' . $this->distDirectory() . '/' . $entry['file'],
+            $distUri . $entry['file'],
             [],
             null,
             true
         );
     }
 
-    /**
-     * Enqueue the dev assets to a script
-     *
-     * @return void
-     */
-    private function enqueueDevAssets(): void
-    {
-
-        $dev = rtrim($this->devServerUrl(), '/');
-
-        wp_enqueue_script('vite-client', $dev . '/@vite/client', [], null, true);
-
-
-        wp_enqueue_script(
-            $this->scriptHandle(),
-            $dev . '/' . $this->entryPoint(),
-            ['vite-client'],
-            null,
-            true
-        );
-
-        $this->addAction('wp_head', function () use ($dev) {
-            echo '<link rel="stylesheet" href="' . esc_url($dev . '/assets/css/main.css') . '" />';
-        });
-    }
-
-    /**
-     * Enqueue the production assets
-     *
-     * @param  string $plugin_dir
-     * @param  string $plugin_uri
-     * @return void
-     */
-    private function enqueueProductionAssets(string $plugin_dir, string $plugin_uri): void
-    {
-        $manifest_path = $plugin_dir . '/' . $this->distDirectory() . '/.vite/manifest.json';
-
-        if (!file_exists($manifest_path)) {
-            error_log("Manifest file not found: " . $manifest_path);
-            return;
-        }
-
-        $manifest = json_decode(file_get_contents($manifest_path), true);
-
-        $entry = $manifest[$this->entryPoint()] ?? null;
-
-        if (!$entry) {
-            error_log("Entry not found in manifest: " . $this->entryPoint());
-            return;
-        }
-
-        if (!empty($entry['css'])) {
-            foreach ($entry['css'] as $css_file) {
-                wp_enqueue_style(
-                    $this->styleHandle(),
-                    $plugin_uri . '/' . $this->distDirectory() . '/' . $css_file,
-                    [],
-                    null
-                );
-            }
-        }
-
-        wp_enqueue_script(
-            $this->scriptHandle(),
-            $plugin_uri . '/' . $this->distDirectory() . '/' . $entry['file'],
-            [],
-            null,
-            true
-        );
-    }
-
-    /**
-     * Adds modules to the scripts
-     *
-     * @return void
-     */
-    private function addModuleTypeToScripts(): void
+    private function registerModuleTypeFilter(): void
     {
         $this->addFilter('script_loader_tag', function ($tag, $handle, $src) {
             if (in_array($handle, ['vite-client', $this->scriptHandle()], true)) {
@@ -228,4 +155,11 @@ abstract class PluginServiceProvider extends ServiceProvider
         }, 10, 3);
     }
 
+    private function reportBuildError(string $message): void
+    {
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            throw new RuntimeException($message);
+        }
+        error_log('[wp-plugin-core] ' . $message);
+    }
 }

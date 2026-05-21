@@ -5,20 +5,17 @@ namespace WpPluginCore\Components;
 abstract class Component
 {
     /**
-     * Renders the HTML for the component
-     *
-     * @return string
+     * Render the component HTML.
      */
     abstract public function render(): string;
 
-    /**
-     * Escaping html special chars
-     *
-     * @param  [type] $value
-     * @return string
-     */
-    protected function escape($value): string
+    protected function escape(?string $value): string
     {
-        return htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
+        return esc_html($value ?? '');
+    }
+
+    protected function escapeAttr(?string $value): string
+    {
+        return esc_attr($value ?? '');
     }
 }

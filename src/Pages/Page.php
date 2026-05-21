@@ -5,17 +5,17 @@ namespace WpPluginCore\Pages;
 abstract class Page
 {
     /**
-     * Page title (admin page title, h1 и т.н.)
+     * Page title (used in the admin <h1> / browser title).
      */
     abstract public static function title(): string;
 
     /**
-     * Render full page HTML
+     * Full page HTML.
      */
     abstract public function render(): string;
 
     /**
-     * Optional wrapper for admin pages
+     * Wrap content in the standard `.wrap` admin container.
      */
     protected static function wrap(string $content): string
     {
@@ -24,6 +24,11 @@ abstract class Page
 
     protected static function escape(?string $value = null): string
     {
-        return htmlspecialchars($value ?? '', ENT_QUOTES, 'UTF-8');
+        return esc_html($value ?? '');
+    }
+
+    protected static function escapeAttr(?string $value = null): string
+    {
+        return esc_attr($value ?? '');
     }
 }

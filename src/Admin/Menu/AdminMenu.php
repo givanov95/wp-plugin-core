@@ -2,47 +2,31 @@
 
 namespace WpPluginCore\Admin\Menu;
 
-use function add_menu_page;
-
 class AdminMenu
 {
-    /**
-     * @var string
-     */
-    private string $pageTitle;
+    private const KIND_TOP   = 'top';
+    private const KIND_SUB   = 'sub';
 
     /**
-     * @var string
+     * @param callable $pageRenderCallback
      */
-    private string $menuTitle;
+    private function __construct(
+        private readonly string $kind,
+        private readonly string $pageTitle,
+        private readonly string $menuTitle,
+        private readonly string $capability,
+        private readonly string $menuSlug,
+        private $pageRenderCallback,
+        private readonly ?string $iconUrl = null,
+        private readonly ?int $position = null,
+        private readonly ?string $parentSlug = null,
+    ) {
+    }
 
     /**
-     * @var string
+     * Create a top-level admin menu.
      */
-    private string $capability;
-
-    /**
-     * @var string
-     */
-    private string $menuSlug;
-
-    /**
-     * @var callable
-     */
-    private $pageRenderCallback;
-
-    /**
-     * @var string|null
-     */
-    private ?string $iconUrl;
-
-    /**
-     *
-     * @var integer|null
-     */
-    private ?int $position;
-
-    public function __construct(
+    public static function topLevel(
         string $pageTitle,
         string $menuTitle,
         string $capability,
@@ -50,26 +34,58 @@ class AdminMenu
         callable $pageRenderCallback,
         ?string $iconUrl = null,
         ?int $position = null
-    ) {
-        $this->pageTitle = $pageTitle;
-        $this->menuTitle = $menuTitle;
-        $this->capability = $capability;
-        $this->menuSlug = $menuSlug;
-        $this->pageRenderCallback = $pageRenderCallback;
-        $this->iconUrl = $iconUrl;
-        $this->position = $position;
-
-
+    ): self {
+        return new self(
+            kind: self::KIND_TOP,
+            pageTitle: $pageTitle,
+            menuTitle: $menuTitle,
+            capability: $capability,
+            menuSlug: $menuSlug,
+            pageRenderCallback: $pageRenderCallback,
+            iconUrl: $iconUrl,
+            position: $position,
+        );
     }
 
-
     /**
-     * Register the menu in WordPress
-     *
-     * @param callable $callback Function to render the page
+     * Create a submenu under a parent slug.
      */
+    public static function submenu(
+        string $parentSlug,
+        string $pageTitle,
+        string $menuTitle,
+        string $capability,
+        string $menuSlug,
+        callable $pageRenderCallback,
+        ?int $position = null
+    ): self {
+        return new self(
+            kind: self::KIND_SUB,
+            pageTitle: $pageTitle,
+            menuTitle: $menuTitle,
+            capability: $capability,
+            menuSlug: $menuSlug,
+            pageRenderCallback: $pageRenderCallback,
+            position: $position,
+            parentSlug: $parentSlug,
+        );
+    }
+
     public function register(): void
     {
+        if ($this->kind === self::KIND_SUB) {
+            add_submenu_page(
+                $this->parentSlug,
+                $this->pageTitle,
+                $this->menuTitle,
+                $this->capability,
+                $this->menuSlug,
+                $this->pageRenderCallback,
+                $this->position
+            );
+            return;
+        }
+
         add_menu_page(
             $this->pageTitle,
             $this->menuTitle,
@@ -81,49 +97,12 @@ class AdminMenu
         );
     }
 
-    /**
-     * Convert to WordPress-friendly array
-     */
-    public function toArray(): array
-    {
-        return [
-            'page_title' => $this->pageTitle,
-            'menu_title' => $this->menuTitle,
-            'capability' => $this->capability,
-            'menu_slug'  => $this->menuSlug,
-            'icon_url'   => $this->iconUrl,
-            'position'   => $this->position,
-        ];
-    }
-
-
-    public function getPageTitle(): string
-    {
-        return $this->pageTitle;
-    }
-
-    public function getMenuTitle(): string
-    {
-        return $this->menuTitle;
-    }
-
-    public function getCapability(): string
-    {
-        return $this->capability;
-    }
-
-    public function getMenuSlug(): string
-    {
-        return $this->menuSlug;
-    }
-
-    public function getIconUrl(): ?string
-    {
-        return $this->iconUrl;
-    }
-
-    public function getPosition(): ?int
-    {
-        return $this->position;
-    }
+    public function getPageTitle(): string  { return $this->pageTitle; }
+    public function getMenuTitle(): string  { return $this->menuTitle; }
+    public function getCapability(): string { return $this->capability; }
+    public function getMenuSlug(): string   { return $this->menuSlug; }
+    public function getIconUrl(): ?string   { return $this->iconUrl; }
+    public function getPosition(): ?int     { return $this->position; }
+    public function getParentSlug(): ?string { return $this->parentSlug; }
+    public function isSubmenu(): bool       { return $this->kind === self::KIND_SUB; }
 }

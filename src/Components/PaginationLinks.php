@@ -4,14 +4,40 @@ namespace WpPluginCore\Components;
 
 use WpPluginCore\Pagination\Paginator;
 
+/**
+ * Renders pagination links for a Paginator.
+ *
+ * Class names and the info-text format are fully configurable via the
+ * constructor. Defaults use Tailwind utility classes and English strings
+ * (translatable via the supplied text domain).
+ */
 class PaginationLinks extends Component
 {
+    /**
+     * @param string $textDomain Text domain used for translating the info string.
+     * @param array{
+     *   container?:    string,
+     *   info?:         string,
+     *   linksWrapper?: string,
+     *   link?:         string,
+     *   linkActive?:   string,
+     *   linkDisabled?: string,
+     *   ellipsis?:     string,
+     * } $classes
+     * @param array{
+     *   prev?:     string,
+     *   next?:     string,
+     *   ellipsis?: string,
+     *   info?:     string  Printf-format with 3 %d: from, to, total
+     * } $labels
+     */
     public function __construct(
-        private Paginator $paginator
+        private readonly Paginator $paginator,
+        private readonly string $textDomain = 'wp-plugin-core',
+        private readonly array $classes = [],
+        private readonly array $labels = [],
     ) {
-
     }
-
 
     public function render(): string
     {
@@ -19,81 +45,62 @@ class PaginationLinks extends Component
             return '';
         }
 
-        $html = '<div class="flex items-center justify-between pt-4">';
+        $p = $this->paginator;
+        $c = $this->classes();
+        $l = $this->labels();
 
-        // info
-        $html .= sprintf(
-            '<div class="text-sm text-slate-600">
-                Показани %d–%d от %d
-            </div>',
-            (($this->paginator->currentPage - 1) * $this->paginator->perPage) + 1,
-            min($this->paginator->currentPage * $this->paginator->perPage, $this->paginator->total),
-            $this->paginator->total
-        );
+        $from  = (($p->currentPage - 1) * $p->perPage) + 1;
+        $to    = min($p->currentPage * $p->perPage, $p->total);
 
-        // links
-        $html .= '<div class="flex gap-1">';
+        $html  = '<div class="' . esc_attr($c['container']) . '">';
+        $html .= '<div class="' . esc_attr($c['info']) . '">';
+        $html .= esc_html(sprintf($l['info'], $from, $to, $p->total));
+        $html .= '</div>';
+        $html .= '<div class="' . esc_attr($c['linksWrapper']) . '">';
 
-        // prev
-        $html .= self::link(
-            $this->paginator,
-            $this->paginator->currentPage - 1,
-            '‹',
-            $this->paginator->currentPage === 1
-        );
+        $html .= $this->link($p->currentPage - 1, $l['prev'], $p->currentPage === 1);
 
-        foreach (self::pages($this->paginator) as $page) {
+        foreach ($this->pages() as $page) {
             if ($page === '...') {
-                $html .= '<span class="px-2 text-slate-500">…</span>';
+                $html .= '<span class="' . esc_attr($c['ellipsis']) . '">'
+                    . esc_html($l['ellipsis']) . '</span>';
                 continue;
             }
 
-            $html .= self::link(
-                $this->paginator,
-                $page,
-                (string)$page,
-                false,
-                $page === $this->paginator->currentPage
-            );
+            $html .= $this->link($page, (string) $page, false, $page === $p->currentPage);
         }
 
-        // next
-        $html .= self::link(
-            $this->paginator,
-            $this->paginator->currentPage + 1,
-            '›',
-            $this->paginator->currentPage === $this->paginator->lastPage
-        );
+        $html .= $this->link($p->currentPage + 1, $l['next'], $p->currentPage === $p->lastPage);
 
         return $html . '</div></div>';
     }
 
-    private static function link(
-        Paginator $p,
-        int $page,
-        string $label,
-        bool $disabled = false,
-        bool $active = false
-    ): string {
+    private function link(int $page, string $label, bool $disabled = false, bool $active = false): string
+    {
+        $c = $this->classes();
+
         if ($disabled) {
-            return '<span class="px-3 py-1 text-slate-400 border rounded">' . $label . '</span>';
+            return '<span class="' . esc_attr($c['linkDisabled']) . '">' . esc_html($label) . '</span>';
         }
 
+        $classes = $active
+            ? trim($c['link'] . ' ' . $c['linkActive'])
+            : $c['link'];
+
         return sprintf(
-            '<a href="%s"
-                class="px-3 py-1 border rounded text-sm %s">
-                %s
-            </a>',
-            esc_url($p->pageUrl($page)),
-            $active
-                ? 'bg-slate-900 text-white border-slate-900'
-                : 'bg-white text-slate-700 hover:bg-slate-100',
+            '<a href="%s" class="%s">%s</a>',
+            esc_url($this->paginator->pageUrl($page)),
+            esc_attr($classes),
             esc_html($label)
         );
     }
 
-    private static function pages(Paginator $p): array
+    /**
+     * @return array<int, int|string>
+     */
+    private function pages(): array
     {
+        $p = $this->paginator;
         $pages = [];
 
         $start = max(1, $p->currentPage - 2);
@@ -118,5 +125,31 @@ class PaginationLinks extends Component
         }
 
         return $pages;
+    }
+
+    private function classes(): array
+    {
+        return $this->classes + [
+            'container'    => 'flex items-center justify-between pt-4',
+            'info'         => 'text-sm text-slate-600',
+            'linksWrapper' => 'flex gap-1',
+            'link'         => 'px-3 py-1 border rounded text-sm bg-white text-slate-700 hover:bg-slate-100',
+            'linkActive'   => 'bg-slate-900 text-white border-slate-900',
+            'linkDisabled' => 'px-3 py-1 text-slate-400 border rounded',
+            'ellipsis'     => 'px-2 text-slate-500',
+        ];
+    }
+
+    private function labels(): array
+    {
+        $defaults = [
+            'prev'     => __('Previous', $this->textDomain),
+            'next'     => __('Next', $this->textDomain),
+            'ellipsis' => '…',
+            /* translators: 1: first item index, 2: last item index, 3: total items */
+            'info'     => __('Showing %1$d–%2$d of %3$d', $this->textDomain),
+        ];
+
+        return $this->labels + $defaults;
     }
 }
