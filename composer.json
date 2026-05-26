@@ -8,6 +8,7 @@
         "php": ">=8.3"
     },
     "require-dev": {
+        "givanov95/laravel-git-hooks": "^0.1.0",
         "guzzlehttp/guzzle": "^7.9",
         "symfony/var-dumper": "^7.3"
     },
@@ -23,7 +24,10 @@
         }
     ],
     "config": {
-        "sort-packages": true
+        "sort-packages": true,
+        "allow-plugins": {
+            "givanov95/laravel-git-hooks": true
+        }
     },
     "minimum-stability": "stable",
     "prefer-stable": true
