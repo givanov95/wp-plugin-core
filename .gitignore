@@ -8,6 +8,9 @@ dist/
 # Dev flag
 .vite-dev
 
+# Claude local settings
+.claude/settings.local.json
+
 # Logs
 *.log
 npm-debug.log*
